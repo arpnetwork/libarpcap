@@ -96,7 +96,8 @@ void arpcap_fini();
 
 int arpcap_get_display_info(ARPDisplayInfo *info);
 
-int arpcap_create(uint32_t width, uint32_t height, arp_callback cb);
+int arpcap_create(
+    uint32_t paddingTop, uint32_t paddingBottom, uint32_t width, uint32_t height, arp_callback cb);
 
 void arpcap_destroy();
 

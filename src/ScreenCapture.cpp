@@ -70,19 +70,17 @@ class FrameProxy : public ConsumerBase::FrameAvailableListener {
 class ScreenCapture
 {
   public:
-    ScreenCapture(uint32_t width, uint32_t height, arp_callback cb);
+    ScreenCapture();
     ~ScreenCapture();
 
-    status_t createDisplay();
+    status_t createDisplay(
+        uint32_t paddingTop, uint32_t paddingBottom,
+        uint32_t width, uint32_t height, arp_callback cb);
     void destroyDisplay();
     status_t acquireFrameBuffer(ARPFrameBuffer *fb);
     void releaseFrameBuffer();
 
   private:
-    uint32_t mWidth;
-    uint32_t mHeight;
-    arp_callback mCallback;
-
     CpuConsumer::LockedBuffer mBuffer;
 
     sp<IBinder> mDisplay;
@@ -92,11 +90,7 @@ class ScreenCapture
     sp<FrameProxy> mFrameProxy;
 };
 
-ScreenCapture::ScreenCapture(uint32_t width, uint32_t height, arp_callback cb) :
-    mWidth(width),
-    mHeight(height),
-    mCallback(cb)
-{
+ScreenCapture::ScreenCapture() {
     mBuffer.data = nullptr;
 }
 
@@ -104,12 +98,15 @@ ScreenCapture::~ScreenCapture() {
     destroyDisplay();
 }
 
-status_t ScreenCapture::createDisplay() {
+status_t ScreenCapture::createDisplay(
+    uint32_t paddingTop, uint32_t paddingBottom,
+    uint32_t width, uint32_t height, arp_callback cb)
+{
     destroyDisplay();
 
     status_t result = android::NO_ERROR;
 
-    mFrameProxy = new FrameProxy(mCallback);
+    mFrameProxy = new FrameProxy(cb);
 
     android::DisplayInfo info;
     result = getMainDisplayInfo(&info);
@@ -119,8 +116,8 @@ status_t ScreenCapture::createDisplay() {
 
     uint32_t srcWidth = info.w;
     uint32_t srcHeight = info.h;
-    uint32_t dstWidth = mWidth;
-    uint32_t dstHeight = mHeight;
+    uint32_t dstWidth = width;
+    uint32_t dstHeight = height;
 
     if (info.orientation == DISPLAY_ORIENTATION_90 ||
         info.orientation == DISPLAY_ORIENTATION_270)
@@ -129,7 +126,7 @@ status_t ScreenCapture::createDisplay() {
         SWAP(dstWidth, dstHeight);
     }
 
-    android::Rect layerStackRect(srcWidth, srcHeight);
+    android::Rect layerStackRect(0, paddingTop, srcWidth, srcHeight - paddingBottom);
     android::Rect visibleRect(dstWidth, dstHeight);
 
     // Always make sure we could initialize
@@ -236,17 +233,22 @@ int arpcap_get_display_info(ARPDisplayInfo *info) {
     return android::NO_ERROR;
 }
 
-int arpcap_create(uint32_t width, uint32_t height, arp_callback cb) {
+int arpcap_create(
+    uint32_t paddingTop, uint32_t paddingBottom,
+    uint32_t width, uint32_t height, arp_callback cb)
+{
     if (sCap != nullptr) {
         return android::ALREADY_EXISTS;
     }
 
-    if (width == 0 || height == 0 || cb == nullptr) {
+    if ((width == 0 || height == 0 || cb == nullptr) &&
+        (paddingTop + paddingBottom < height))
+    {
         return android::BAD_VALUE;
     }
 
-    sCap = new arp::ScreenCapture(width, height, cb);
-    status_t res = sCap->createDisplay();
+    sCap = new arp::ScreenCapture();
+    status_t res = sCap->createDisplay(paddingTop, paddingBottom, width, height, cb);
     if (res != android::NO_ERROR) {
         delete sCap;
         sCap = nullptr;
